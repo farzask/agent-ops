@@ -1,0 +1,35 @@
+# AgentOps backend dependencies.
+#
+# DELIBERATELY ABSENT (TECH_SPEC 1.1 / 8.3): langchain, langgraph, crewai,
+# autogen, llama-index, semantic-kernel, pydantic-ai, instructor, dspy, and the
+# openai / anthropic vendor SDKs. All orchestration, prompt construction,
+# response parsing, and retry logic is hand-written. LLM calls go over raw httpx.
+# See .claude/skills/agentops-conventions/SKILL.md.
+
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+
+# Raw async HTTP client - the only LLM transport dependency.
+httpx==0.28.1
+
+# Postgres, async.
+sqlalchemy[asyncio]==2.0.36
+asyncpg==0.30.0
+alembic==1.14.0
+greenlet==3.1.1
+
+# Redis: job queue + pub/sub fan-out.
+redis==5.2.1
+
+# Schemas and config.
+pydantic==2.10.4
+pydantic-settings==2.7.0
+
+# Tests
+pytest==8.3.4
+pytest-asyncio==0.25.0
+aiosqlite==0.20.0
+
+# Lint / type-check (CI)
+ruff==0.8.6
+mypy==1.14.1

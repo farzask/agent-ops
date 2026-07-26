@@ -1,0 +1,35 @@
+### Secrets ###
+.env
+.env.local
+.env.*.local
+!.env.example
+
+### Python ###
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+### Node / Next.js ###
+node_modules/
+.next/
+out/
+build/
+*.tsbuildinfo
+next-env.d.ts
+coverage/
+
+### Editors / OS ###
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+### Claude Code ###
+.claude/settings.local.json
