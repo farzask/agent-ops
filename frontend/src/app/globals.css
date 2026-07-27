@@ -1,0 +1,10 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Dark is the baseline for this dashboard, so the scrollbars should match. */
+@layer base {
+  * {
+    scrollbar-color: #334155 transparent;
+  }
+}
