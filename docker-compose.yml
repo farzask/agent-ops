@@ -1,0 +1,138 @@
+# AgentOps local stack (TECH_SPEC §2).
+#
+# Four services: frontend, backend (API), worker (queue consumer), plus postgres
+# and redis. The worker is a separate service on purpose - TECH_SPEC §8.2
+# requires request handling to be decoupled from long-running task execution.
+#
+# REQUIRES COMPOSE V2 (`docker compose`, space not hyphen). The `condition:`
+# forms of depends_on - especially `service_completed_successfully`, which gates
+# startup on the migration finishing - are Compose v2 features. The legacy
+# docker-compose v1 Python binary silently ignores them, which would let the API
+# start against a database that has no tables yet.
+#
+# Check your version and upgrade if needed:
+#   docker compose version          # want v2.x
+#   sudo apt-get install docker-compose-v2
+#
+# The `version:` top-level key is intentionally omitted - it is obsolete in the
+# Compose spec and v2 warns about it.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-agentops}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-agentops}
+      POSTGRES_DB: ${POSTGRES_DB:-agentops}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      # `-d` and `-U` are required: without them pg_isready reports ready before
+      # the target database itself exists, and the migration then fails.
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-agentops} -d ${POSTGRES_DB:-agentops}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Runs migrations to completion, then exits. Both the API and the worker wait
+  # on it so neither can start against a schema that does not exist yet.
+  migrate:
+    build:
+      context: ./backend
+    command: alembic upgrade head
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-agentops}:${POSTGRES_PASSWORD:-agentops}@postgres:5432/${POSTGRES_DB:-agentops}
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  backend:
+    build:
+      context: ./backend
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-agentops}:${POSTGRES_PASSWORD:-agentops}@postgres:5432/${POSTGRES_DB:-agentops}
+      REDIS_URL: redis://redis:6379/0
+      LLM_PROVIDER: ${LLM_PROVIDER:-mock}
+      LLM_MODEL: ${LLM_MODEL:-mock-small}
+      MOCK_FAILURE_RATE: ${MOCK_FAILURE_RATE:-0.0}
+      MOCK_MALFORMED_RATE: ${MOCK_MALFORMED_RATE:-0.0}
+      MOCK_LATENCY_MS: ${MOCK_LATENCY_MS:-350}
+      MAX_RETRIES: ${MAX_RETRIES:-3}
+      MAX_REWORK_CYCLES: ${MAX_REWORK_CYCLES:-2}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  # The queue consumer. Same image, different process (TECH_SPEC §8.2).
+  worker:
+    build:
+      context: ./backend
+    command: python worker.py
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-agentops}:${POSTGRES_PASSWORD:-agentops}@postgres:5432/${POSTGRES_DB:-agentops}
+      REDIS_URL: redis://redis:6379/0
+      LLM_PROVIDER: ${LLM_PROVIDER:-mock}
+      LLM_MODEL: ${LLM_MODEL:-mock-small}
+      MOCK_FAILURE_RATE: ${MOCK_FAILURE_RATE:-0.0}
+      MOCK_MALFORMED_RATE: ${MOCK_MALFORMED_RATE:-0.0}
+      MOCK_LATENCY_MS: ${MOCK_LATENCY_MS:-350}
+      MAX_RETRIES: ${MAX_RETRIES:-3}
+      MAX_REWORK_CYCLES: ${MAX_REWORK_CYCLES:-2}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # Browser-visible, so these are the host-reachable URLs, not the
+        # Docker-internal service names.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+        NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-ws://localhost:8000}
+    environment:
+      # Server-side only: Server Components reach the API over the Docker network.
+      BACKEND_INTERNAL_URL: http://backend:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  redis_data:

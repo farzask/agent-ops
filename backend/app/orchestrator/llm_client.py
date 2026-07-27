@@ -139,9 +139,7 @@ class MockProvider(LLMProvider):
             await asyncio.sleep((s.mock_latency_ms / 1000.0) * jitter)
 
         if self._rng.random() < s.mock_failure_rate:
-            raise TransientLLMError(
-                "mock provider: simulated upstream 503 (MOCK_FAILURE_RATE)"
-            )
+            raise TransientLLMError("mock provider: simulated upstream 503 (MOCK_FAILURE_RATE)")
 
         if self._rng.random() < s.mock_malformed_rate:
             return LLMResponse(
@@ -227,8 +225,7 @@ class MockProvider(LLMProvider):
                     "approved": True,
                     "score": 0.86,
                     "feedback": (
-                        "Output addresses the original task and is internally consistent. "
-                        "Approved."
+                        "Output addresses the original task and is internally consistent. Approved."
                     ),
                 }
             )
@@ -376,7 +373,7 @@ class LLMClient:
             except PermanentLLMError:
                 # Permanent by definition - retrying cannot help.
                 raise
-            except (TransientLLMError, asyncio.TimeoutError) as exc:
+            except (TimeoutError, TransientLLMError) as exc:
                 if isinstance(exc, asyncio.TimeoutError):
                     exc = TransientLLMError(
                         f"LLM call exceeded {settings.llm_timeout_seconds}s timeout"
@@ -424,7 +421,7 @@ class LLMClient:
                 return extract_json(response.text), response
             except PermanentLLMError:
                 raise
-            except (TransientLLMError, asyncio.TimeoutError) as exc:
+            except (TimeoutError, TransientLLMError) as exc:
                 if isinstance(exc, asyncio.TimeoutError):
                     exc = TransientLLMError(
                         f"LLM call exceeded {settings.llm_timeout_seconds}s timeout"

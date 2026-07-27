@@ -60,9 +60,7 @@ async def create_job(
             detail="job queue is unavailable; job was recorded as failed",
         ) from exc
 
-    return JobCreateResponse(
-        job_id=job.id, status=job.status, created_at=job.created_at
-    )
+    return JobCreateResponse(job_id=job.id, status=job.status, created_at=job.created_at)
 
 
 @router.get("", response_model=JobListResponse)
@@ -75,16 +73,10 @@ async def list_jobs(
     filters = [Job.status == job_status] if job_status is not None else []
 
     # A real COUNT, not the page length - the UI paginates on this.
-    total = await session.scalar(
-        select(func.count()).select_from(Job).where(*filters)
-    )
+    total = await session.scalar(select(func.count()).select_from(Job).where(*filters))
 
     result = await session.execute(
-        select(Job)
-        .where(*filters)
-        .order_by(Job.created_at.desc())
-        .limit(limit)
-        .offset(offset)
+        select(Job).where(*filters).order_by(Job.created_at.desc()).limit(limit).offset(offset)
     )
 
     return JobListResponse(
@@ -114,9 +106,7 @@ async def get_job(
     # Explicit query rather than `job.agent_runs`: relationships are lazy="raise"
     # so an implicit load would fail loudly instead of silently blocking.
     runs = await session.execute(
-        select(AgentRun)
-        .where(AgentRun.job_id == job_id)
-        .order_by(AgentRun.sequence_index)
+        select(AgentRun).where(AgentRun.job_id == job_id).order_by(AgentRun.sequence_index)
     )
 
     return JobDetailResponse(
@@ -170,10 +160,7 @@ async def get_job_logs(
         filters.append(AgentLog.timestamp > since)
 
     result = await session.execute(
-        select(AgentLog)
-        .where(*filters)
-        .order_by(AgentLog.timestamp, AgentLog.id)
-        .limit(limit)
+        select(AgentLog).where(*filters).order_by(AgentLog.timestamp, AgentLog.id).limit(limit)
     )
     logs = [
         LogEntry(

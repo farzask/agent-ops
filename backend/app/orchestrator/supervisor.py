@@ -67,9 +67,7 @@ class SupervisorAgent(Agent):
                 )
             description = str(item.get("description", "")).strip()
             if not description:
-                raise MalformedResponseError(
-                    f"subtask {position} has an empty description"
-                )
+                raise MalformedResponseError(f"subtask {position} has an empty description")
             # Renumber from position rather than trusting the model's `index`:
             # models skip and duplicate indices, and the pipeline keys worker
             # output by index.
@@ -86,8 +84,7 @@ class SupervisorAgent(Agent):
 
         return {
             "subtasks": [
-                {"index": s.index, "agent": s.agent, "description": s.description}
-                for s in subtasks
+                {"index": s.index, "agent": s.agent, "description": s.description} for s in subtasks
             ],
             "reasoning": context.plan_reasoning,
         }

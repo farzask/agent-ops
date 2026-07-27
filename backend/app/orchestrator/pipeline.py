@@ -87,47 +87,35 @@ class Pipeline:
 
         if job.status is not JobStatus.QUEUED:
             # Guard against double-consumption of a queue message.
-            raise PipelineFailure(
-                f"job {job_id} is {job.status.value}, expected queued"
-            )
+            raise PipelineFailure(f"job {job_id} is {job.status.value}, expected queued")
 
         await emitter.job_status(job, JobStatus.RUNNING)
-        await emitter.log(
-            f"Pipeline started. Task: {job.task_description}", level=LogLevel.INFO
-        )
+        await emitter.log(f"Pipeline started. Task: {job.task_description}", level=LogLevel.INFO)
 
         try:
             await self._run_stages(job, emitter, context)
         except PipelineFailure as exc:
             reason = str(exc)
-            await emitter.log(
-                f"Pipeline halted: {reason}", level=LogLevel.ERROR
-            )
+            await emitter.log(f"Pipeline halted: {reason}", level=LogLevel.ERROR)
             await emitter.job_status(job, JobStatus.FAILED, failure_reason=reason)
             return PipelineResult(job_id, JobStatus.FAILED, None, reason)
         except Exception as exc:  # unexpected - still must not leave job running
             reason = f"unexpected {type(exc).__name__}: {exc}"
             logger.exception("unhandled error in pipeline for job %s", job_id)
-            await emitter.log(
-                f"Pipeline crashed: {reason}", level=LogLevel.ERROR
-            )
+            await emitter.log(f"Pipeline crashed: {reason}", level=LogLevel.ERROR)
             await emitter.job_status(job, JobStatus.FAILED, failure_reason=reason)
             return PipelineResult(job_id, JobStatus.FAILED, None, reason)
 
         final_output = context.combined_output()
         await emitter.log("Pipeline completed successfully.", level=LogLevel.INFO)
-        await emitter.job_status(
-            job, JobStatus.COMPLETED, final_output=final_output
-        )
+        await emitter.job_status(job, JobStatus.COMPLETED, final_output=final_output)
         return PipelineResult(job_id, JobStatus.COMPLETED, final_output, None)
 
     # -----------------------------------------------------------------------
     # Stages
     # -----------------------------------------------------------------------
 
-    async def _run_stages(
-        self, job: Job, emitter: EventEmitter, context: PipelineContext
-    ) -> None:
+    async def _run_stages(self, job: Job, emitter: EventEmitter, context: PipelineContext) -> None:
         # --- 1. Supervisor: decompose -------------------------------------
         supervisor = SupervisorAgent(self._llm)
         sup_run = await self._ensure_run(job.id, supervisor.name, 0)
@@ -207,11 +195,7 @@ class Pipeline:
             await self._session.commit()
 
             reject_index = payload.get("reject_subtask_index")
-            target = (
-                f"subtask {reject_index}"
-                if reject_index is not None
-                else "all subtasks"
-            )
+            target = f"subtask {reject_index}" if reject_index is not None else "all subtasks"
             await emitter.log(
                 f"Verifier rejected the output (rework cycle {rework_cycles} of "
                 f"{self._settings.max_rework_cycles}), routing {target} back to "
@@ -304,9 +288,7 @@ class Pipeline:
             await emitter.agent_status(run, AgentStatus.RUNNING)
 
         try:
-            payload = await agent.run(
-                context, on_retry=on_retry, model=self._settings.llm_model
-            )
+            payload = await agent.run(context, on_retry=on_retry, model=self._settings.llm_model)
         except PermanentLLMError as exc:
             reason = f"permanent LLM failure: {exc}"
             await emitter.log(
@@ -335,9 +317,7 @@ class Pipeline:
             await emitter.agent_status(run, AgentStatus.FAILED, failure_reason=reason)
             raise PipelineFailure(f"{agent.name}: {reason}") from exc
 
-        await emitter.agent_status(
-            run, AgentStatus.COMPLETED, output_payload=payload
-        )
+        await emitter.agent_status(run, AgentStatus.COMPLETED, output_payload=payload)
         return payload
 
     # -----------------------------------------------------------------------

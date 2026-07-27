@@ -21,6 +21,11 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 # Alembic's generated-file conventions.
 "alembic/versions/*" = ["E402"]
+# B008 flags function calls in argument defaults, but `Depends(...)` and
+# `Query(...)` in defaults *is* the FastAPI dependency-injection idiom - the
+# framework evaluates them per request, so the usual mutable-default hazard the
+# rule targets does not apply here.
+"app/api/*" = ["B008"]
 
 [tool.mypy]
 python_version = "3.12"

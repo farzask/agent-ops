@@ -37,14 +37,11 @@ class ClarifierAgent(Agent):
     purpose = "clarify"
 
     def build_prompt(self, context: PipelineContext, **kwargs: Any) -> LLMRequest:
-        plan_lines = "\n".join(
-            f"{s.index}. [{s.agent}] {s.description}" for s in context.plan
-        )
+        plan_lines = "\n".join(f"{s.index}. [{s.agent}] {s.description}" for s in context.plan)
         return LLMRequest(
             system=SYSTEM_PROMPT,
             user=(
-                f"Original task:\n{context.task_description}\n\n"
-                f"Supervisor's plan:\n{plan_lines}"
+                f"Original task:\n{context.task_description}\n\nSupervisor's plan:\n{plan_lines}"
             ),
             model=kwargs.get("model", ""),
             purpose=self.purpose,

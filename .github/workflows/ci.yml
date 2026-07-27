@@ -1,0 +1,159 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A new push to the same branch cancels the previous run rather than queueing.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend — lint, types, tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          # Matches backend/Dockerfile.
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Ruff (lint + import order)
+        run: ruff check .
+
+      - name: Ruff (formatting drift)
+        run: ruff format --check .
+
+      - name: mypy
+        run: mypy app worker.py
+
+      - name: pytest
+        # Unit tests use in-memory SQLite, so no service containers are needed.
+        run: pytest -v
+
+      - name: Assert no agent framework crept into the dependencies
+        # The README's headline claim is "raw API calls, no agent framework".
+        # This is the check that keeps that claim true (TECH_SPEC §1.1, §8.3).
+        run: |
+          set -e
+          BANNED='langchain|langgraph|crewai|autogen|pyautogen|llama[-_]index|semantic-kernel|haystack|pydantic-ai|instructor|marvin|dspy'
+          if grep -Eiq "^($BANNED)" requirements.txt; then
+            echo "::error::A banned agent framework is present in requirements.txt"
+            grep -Ei "^($BANNED)" requirements.txt
+            exit 1
+          fi
+          # Vendor SDKs are banned too - LLM calls go over raw httpx.
+          if grep -Eiq '^(openai|anthropic|google-generativeai|cohere|mistralai)([=<>~[]|$)' requirements.txt; then
+            echo "::error::A vendor LLM SDK is present; TECH_SPEC §8.3 requires raw httpx calls"
+            exit 1
+          fi
+          echo "No agent frameworks or vendor SDKs found."
+
+      - name: Verify the migration renders valid Postgres DDL
+        # Offline mode needs no database, but still exercises the revision
+        # graph, the native enum ordering, and every index definition.
+        env:
+          DATABASE_URL: postgresql+asyncpg://ci:ci@localhost:5432/ci
+        run: alembic upgrade head --sql > /dev/null
+
+  frontend:
+    name: Frontend — types, tests, build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Matches frontend/Dockerfile.
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript
+        run: npm run typecheck
+
+      - name: Vitest
+        run: npm test
+
+      - name: Next build
+        run: npm run build
+
+  migration-check:
+    name: Migration applies to a real Postgres
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: agentops
+          POSTGRES_PASSWORD: agentops
+          POSTGRES_DB: agentops
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U agentops -d agentops"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql+asyncpg://agentops:agentops@localhost:5432/agentops
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - run: pip install -r requirements.txt
+
+      - name: Upgrade to head
+        run: alembic upgrade head
+
+      - name: Downgrade and re-upgrade
+        # A downgrade that was never executed is not a reviewed downgrade.
+        run: |
+          alembic downgrade base
+          alembic upgrade head
+
+      - name: Autogenerate must produce an empty diff
+        # If it does not, the models and the migration disagree.
+        run: |
+          alembic revision --autogenerate -m "ci drift check" >/dev/null
+          NEW=$(ls -t alembic/versions/*.py | head -1)
+          if grep -Eq '^\s+op\.(create|drop|alter|add|execute)' "$NEW"; then
+            echo "::error::Models have drifted from the migrations. Offending diff:"
+            cat "$NEW"
+            exit 1
+          fi
+          echo "No schema drift."

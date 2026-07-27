@@ -54,20 +54,18 @@ def test_supervisor_renumbers_subtasks_from_position(
 def test_supervisor_defaults_missing_agent_to_worker(
     client: LLMClient, context: PipelineContext
 ) -> None:
-    SupervisorAgent(client).parse(
-        {"subtasks": [{"description": "do the thing"}]}, context
-    )
+    SupervisorAgent(client).parse({"subtasks": [{"description": "do the thing"}]}, context)
     assert context.plan[0].agent == "Worker"
 
 
 @pytest.mark.parametrize(
     "data",
     [
-        {},                                            # no subtasks key
-        {"subtasks": []},                              # empty plan
-        {"subtasks": "not a list"},                    # wrong type
-        {"subtasks": ["a string, not an object"]},      # wrong item type
-        {"subtasks": [{"description": "   "}]},         # blank description
+        {},  # no subtasks key
+        {"subtasks": []},  # empty plan
+        {"subtasks": "not a list"},  # wrong type
+        {"subtasks": ["a string, not an object"]},  # wrong item type
+        {"subtasks": [{"description": "   "}]},  # blank description
     ],
 )
 def test_supervisor_rejects_bad_plans(
@@ -77,21 +75,13 @@ def test_supervisor_rejects_bad_plans(
         SupervisorAgent(client).parse(data, context)
 
 
-def test_supervisor_enforces_subtask_limit(
-    client: LLMClient, context: PipelineContext
-) -> None:
-    too_many = {
-        "subtasks": [
-            {"description": f"task {i}"} for i in range(MAX_SUBTASKS + 1)
-        ]
-    }
+def test_supervisor_enforces_subtask_limit(client: LLMClient, context: PipelineContext) -> None:
+    too_many = {"subtasks": [{"description": f"task {i}"} for i in range(MAX_SUBTASKS + 1)]}
     with pytest.raises(MalformedResponseError):
         SupervisorAgent(client).parse(too_many, context)
 
 
-def test_supervisor_prompt_includes_the_task(
-    client: LLMClient, context: PipelineContext
-) -> None:
+def test_supervisor_prompt_includes_the_task(client: LLMClient, context: PipelineContext) -> None:
     request = SupervisorAgent(client).build_prompt(context, model="m")
     assert context.task_description in request.user
     assert request.purpose == "plan"
@@ -119,17 +109,13 @@ def test_clarifier_records_assumptions_without_blocking(
     assert payload["revised_plan_notes"] == "fine as written"
 
 
-def test_clarifier_tolerates_empty_lists(
-    client: LLMClient, context: PipelineContext
-) -> None:
+def test_clarifier_tolerates_empty_lists(client: LLMClient, context: PipelineContext) -> None:
     ClarifierAgent(client).parse({}, context)
     assert context.assumptions == []
     assert context.ambiguities == []
 
 
-def test_clarifier_prompt_includes_the_plan(
-    client: LLMClient, context: PipelineContext
-) -> None:
+def test_clarifier_prompt_includes_the_plan(client: LLMClient, context: PipelineContext) -> None:
     context.plan = [Subtask(1, "Worker", "research the topic")]
     request = ClarifierAgent(client).build_prompt(context, model="m")
     assert "research the topic" in request.user
@@ -199,9 +185,7 @@ def test_worker_prompt_includes_verifier_feedback_on_rework(
 # ---------------------------------------------------------------------------
 
 
-def test_verifier_approval_clears_feedback(
-    client: LLMClient, context: PipelineContext
-) -> None:
+def test_verifier_approval_clears_feedback(client: LLMClient, context: PipelineContext) -> None:
     """Stale approval feedback in a later Worker prompt is confusing noise."""
     context.verifier_feedback = "an older rejection"
     payload = VerifierAgent(client).parse(
@@ -249,9 +233,7 @@ def test_verifier_rejects_ambiguous_approval(
 ) -> None:
     """Mis-reading an approval would ship unverified output - never guess."""
     with pytest.raises(MalformedResponseError):
-        VerifierAgent(client).parse(
-            {"approved": approved, "feedback": "f"}, context
-        )
+        VerifierAgent(client).parse({"approved": approved, "feedback": "f"}, context)
 
 
 def test_verifier_missing_approved_key_is_malformed(

@@ -44,9 +44,7 @@ class VerifierAgent(Agent):
     purpose = "verify"
 
     def build_prompt(self, context: PipelineContext, **kwargs: Any) -> LLMRequest:
-        plan_lines = "\n".join(
-            f"{s.index}. {s.description}" for s in context.plan
-        )
+        plan_lines = "\n".join(f"{s.index}. {s.description}" for s in context.plan)
         sections = [
             f"Original task:\n{context.task_description}",
             f"Plan that was executed:\n{plan_lines}",

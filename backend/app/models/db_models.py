@@ -8,12 +8,11 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from enum import Enum
+from enum import Enum, StrEnum
 
 from sqlalchemy import (
     JSON,
     DateTime,
-    Enum as SAEnum,
     ForeignKey,
     Index,
     Integer,
@@ -22,7 +21,11 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PgUUID
+from sqlalchemy import (
+    Enum as SAEnum,
+)
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -52,14 +55,14 @@ JSON_TYPE = JSONB().with_variant(JSON(), "sqlite")
 # ---------------------------------------------------------------------------
 
 
-class JobStatus(str, Enum):
+class JobStatus(StrEnum):
     QUEUED = "queued"
     RUNNING = "running"
     COMPLETED = "completed"
     FAILED = "failed"
 
 
-class AgentStatus(str, Enum):
+class AgentStatus(StrEnum):
     IDLE = "idle"
     QUEUED = "queued"
     RUNNING = "running"
@@ -68,7 +71,7 @@ class AgentStatus(str, Enum):
     RETRYING = "retrying"
 
 
-class LogLevel(str, Enum):
+class LogLevel(StrEnum):
     INFO = "info"
     WARN = "warn"
     ERROR = "error"
@@ -114,13 +117,13 @@ class Job(Base):
 
     # lazy="raise" makes an accidental lazy load fail loudly at development
     # time instead of raising MissingGreenlet from inside a request.
-    agent_runs: Mapped[list["AgentRun"]] = relationship(
+    agent_runs: Mapped[list[AgentRun]] = relationship(
         back_populates="job",
         cascade="all, delete-orphan",
         order_by="AgentRun.sequence_index",
         lazy="raise",
     )
-    logs: Mapped[list["AgentLog"]] = relationship(
+    logs: Mapped[list[AgentLog]] = relationship(
         back_populates="job",
         cascade="all, delete-orphan",
         order_by="AgentLog.timestamp",
@@ -162,7 +165,7 @@ class AgentRun(Base):
     failure_reason: Mapped[str | None] = mapped_column(Text)
 
     job: Mapped[Job] = relationship(back_populates="agent_runs", lazy="raise")
-    logs: Mapped[list["AgentLog"]] = relationship(
+    logs: Mapped[list[AgentLog]] = relationship(
         back_populates="agent_run", cascade="all, delete-orphan", lazy="raise"
     )
 
@@ -194,15 +197,11 @@ class AgentLog(Base):
     timestamp: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
-    level: Mapped[LogLevel] = mapped_column(
-        LOG_LEVEL_ENUM, nullable=False, default=LogLevel.INFO
-    )
+    level: Mapped[LogLevel] = mapped_column(LOG_LEVEL_ENUM, nullable=False, default=LogLevel.INFO)
     message: Mapped[str] = mapped_column(Text, nullable=False)
 
     job: Mapped[Job] = relationship(back_populates="logs", lazy="raise")
-    agent_run: Mapped[AgentRun | None] = relationship(
-        back_populates="logs", lazy="raise"
-    )
+    agent_run: Mapped[AgentRun | None] = relationship(back_populates="logs", lazy="raise")
 
     __table_args__ = (
         # Chronological retrieval and `?since=` cursor pagination.

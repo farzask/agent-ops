@@ -1,0 +1,12 @@
+# Test and lint tooling. Not installed in the production image.
+-r requirements.txt
+
+pytest==9.0.2
+pytest-asyncio==1.4.0
+
+# Unit tests run against in-memory SQLite via the dialect variants in
+# db_models.py, so they need no live Postgres.
+aiosqlite==0.22.1
+
+ruff==0.16.0
+mypy==2.3.0

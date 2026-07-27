@@ -13,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
+from app.core.redis_client import GLOBAL_EVENTS_CHANNEL
 from app.models.db_models import AgentLog, AgentRun, AgentStatus, Job, JobStatus
 from app.orchestrator.events import InMemoryEventPublisher
 from app.orchestrator.llm_client import (
@@ -28,8 +29,16 @@ from app.orchestrator.pipeline import Pipeline
 
 
 def _events(publisher: InMemoryEventPublisher, event_type: str) -> list[dict]:
+    """Events of one type, from the per-job channel only.
+
+    Job-level events are deliberately fanned out to the global channel too (so
+    the Job Queue View needn't subscribe per job), so counting every message
+    would double them. test_events.py covers that fan-out explicitly.
+    """
     out = []
-    for _channel, raw in publisher.messages:
+    for channel, raw in publisher.messages:
+        if channel == GLOBAL_EVENTS_CHANNEL:
+            continue
         event = json.loads(raw)
         if event["event_type"] == event_type:
             out.append(event)
@@ -105,9 +114,7 @@ def _pipeline(
     provider: LLMProvider,
     sleep=None,
 ) -> Pipeline:
-    client = LLMClient(
-        provider, settings, sleep=sleep or (lambda _d: _noop())
-    )
+    client = LLMClient(provider, settings, sleep=sleep or (lambda _d: _noop()))
     return Pipeline(session, publisher, client, settings)
 
 
@@ -188,11 +195,21 @@ async def test_happy_path_emits_full_transition_sequence(
 
     # Every agent goes queued -> running -> completed, in pipeline order.
     assert _status_pairs(publisher) == [
-        ("Supervisor", "queued"), ("Supervisor", "running"), ("Supervisor", "completed"),
-        ("Clarifier", "queued"), ("Clarifier", "running"), ("Clarifier", "completed"),
-        ("Worker-1", "queued"), ("Worker-1", "running"), ("Worker-1", "completed"),
-        ("Worker-2", "queued"), ("Worker-2", "running"), ("Worker-2", "completed"),
-        ("Verifier", "queued"), ("Verifier", "running"), ("Verifier", "completed"),
+        ("Supervisor", "queued"),
+        ("Supervisor", "running"),
+        ("Supervisor", "completed"),
+        ("Clarifier", "queued"),
+        ("Clarifier", "running"),
+        ("Clarifier", "completed"),
+        ("Worker-1", "queued"),
+        ("Worker-1", "running"),
+        ("Worker-1", "completed"),
+        ("Worker-2", "queued"),
+        ("Worker-2", "running"),
+        ("Worker-2", "completed"),
+        ("Verifier", "queued"),
+        ("Verifier", "running"),
+        ("Verifier", "completed"),
     ]
 
     job_events = [e["payload"]["new_status"] for e in _events(publisher, "job_status_changed")]
@@ -216,9 +233,7 @@ async def test_assumptions_and_subtasks_are_logged(
     )
     await _pipeline(session, publisher, settings, provider).run(queued_job.id)
 
-    messages = [
-        e["payload"]["message"] for e in _events(publisher, "log_line")
-    ]
+    messages = [e["payload"]["message"] for e in _events(publisher, "log_line")]
     assert any("Decomposed task into 2 subtask" in m for m in messages)
     assert any("Assumption recorded" in m and "technical reader" in m for m in messages)
     assert any("Ambiguity identified" in m for m in messages)
@@ -255,14 +270,10 @@ async def test_transient_failure_emits_retrying_then_succeeds(
 
     supervisor_states = [s for name, s in _status_pairs(publisher) if name == "Supervisor"]
     # The retry is observable: failed -> retrying -> running, not swallowed.
-    assert supervisor_states == [
-        "queued", "running", "failed", "retrying", "running", "completed"
-    ]
+    assert supervisor_states == ["queued", "running", "failed", "retrying", "running", "completed"]
 
     run = (
-        await session.execute(
-            select(AgentRun).where(AgentRun.agent_name == "Supervisor")
-        )
+        await session.execute(select(AgentRun).where(AgentRun.agent_name == "Supervisor"))
     ).scalar_one()
     assert run.attempt_count == 2
     assert run.status is AgentStatus.COMPLETED
@@ -294,18 +305,13 @@ async def test_retries_exhausted_fails_the_run_with_a_reason(
     assert queued_job.completed_at is not None
 
     run = (
-        await session.execute(
-            select(AgentRun).where(AgentRun.agent_name == "Supervisor")
-        )
+        await session.execute(select(AgentRun).where(AgentRun.agent_name == "Supervisor"))
     ).scalar_one()
     assert run.status is AgentStatus.FAILED
     assert run.attempt_count == settings.max_retries
 
     # The pipeline halts - no downstream agent should have been created.
-    names = {
-        r.agent_name
-        for r in (await session.execute(select(AgentRun))).scalars()
-    }
+    names = {r.agent_name for r in (await session.execute(select(AgentRun))).scalars()}
     assert names == {"Supervisor"}
 
 
@@ -366,14 +372,16 @@ async def test_verifier_rejection_reworks_only_the_named_subtask(
     # Worker-1's output survived the rework cycle; only Worker-2 re-ran.
     assert worker1 == ["queued", "running", "completed"]
     assert worker2 == [
-        "queued", "running", "completed",   # first pass
-        "queued", "running", "completed",   # rework
+        "queued",
+        "running",
+        "completed",  # first pass
+        "queued",
+        "running",
+        "completed",  # rework
     ]
 
     run2 = (
-        await session.execute(
-            select(AgentRun).where(AgentRun.agent_name == "Worker-2")
-        )
+        await session.execute(select(AgentRun).where(AgentRun.agent_name == "Worker-2"))
     ).scalar_one()
     assert run2.attempt_count == 2
 
@@ -401,9 +409,7 @@ async def test_rework_does_not_consume_the_technical_retry_budget(
     await _pipeline(session, publisher, settings, provider).run(queued_job.id)
 
     verifier = (
-        await session.execute(
-            select(AgentRun).where(AgentRun.agent_name == "Verifier")
-        )
+        await session.execute(select(AgentRun).where(AgentRun.agent_name == "Verifier"))
     ).scalar_one()
 
     assert verifier.rework_count == 1, "the rejection is a rework, tracked separately"
@@ -501,21 +507,15 @@ async def test_default_mock_provider_runs_end_to_end(
 
     This is the path the demo actually uses (PRD 9: >95% of demo runs complete).
     """
-    result = await _pipeline(
-        session, publisher, settings, MockProvider(settings)
-    ).run(queued_job.id)
+    result = await _pipeline(session, publisher, settings, MockProvider(settings)).run(
+        queued_job.id
+    )
 
     assert result.status is JobStatus.COMPLETED, result.failure_reason
     assert result.final_output
 
     runs = (
-        (
-            await session.execute(
-                select(AgentRun).order_by(AgentRun.sequence_index)
-            )
-        )
-        .scalars()
-        .all()
+        (await session.execute(select(AgentRun).order_by(AgentRun.sequence_index))).scalars().all()
     )
     # The mock's canned plan has 3 subtasks.
     assert [r.agent_name for r in runs] == [

@@ -239,6 +239,7 @@ async def test_mock_provider_returns_valid_json_per_purpose(
 async def test_mock_seed_makes_failures_reproducible() -> None:
     """MOCK_SEED must give identical behaviour across runs, or a test asserting
     on retry counts is flaky."""
+
     def build() -> MockProvider:
         return MockProvider(
             Settings(

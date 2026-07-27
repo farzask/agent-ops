@@ -46,9 +46,7 @@ class PipelineContext:
     verifier_score: float | None = None
 
     def combined_output(self) -> str:
-        return "\n\n".join(
-            self.subtask_outputs[i] for i in sorted(self.subtask_outputs)
-        )
+        return "\n\n".join(self.subtask_outputs[i] for i in sorted(self.subtask_outputs))
 
 
 class Agent(ABC):
@@ -97,8 +95,7 @@ class Agent(ABC):
         value = data[key]
         if not isinstance(value, expected):
             raise MalformedResponseError(
-                f"key {key!r} should be {expected.__name__}, got "
-                f"{type(value).__name__}"
+                f"key {key!r} should be {expected.__name__}, got {type(value).__name__}"
             )
         return value
 

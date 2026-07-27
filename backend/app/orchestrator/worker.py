@@ -73,8 +73,7 @@ class WorkerAgent(Agent):
             )
 
         sections.append(
-            f"Your assigned subtask ({self.subtask.index}):\n"
-            f"{self.subtask.description}"
+            f"Your assigned subtask ({self.subtask.index}):\n{self.subtask.description}"
         )
 
         return LLMRequest(

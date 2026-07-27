@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Annotated, Literal, Union
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -160,6 +160,6 @@ class JobStatusChangedEvent(_Envelope):
 
 
 Event = Annotated[
-    Union[AgentStatusChangedEvent, LogLineEvent, JobStatusChangedEvent],
+    AgentStatusChangedEvent | LogLineEvent | JobStatusChangedEvent,
     Field(discriminator="event_type"),
 ]

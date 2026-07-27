@@ -16,7 +16,7 @@ import signal
 import uuid
 
 import redis.asyncio as redis
-from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import Settings, get_settings
 from app.core.redis_client import JOB_QUEUE_KEY
@@ -92,9 +92,7 @@ class QueueWorker:
 
     async def _next_job(self) -> uuid.UUID | None:
         try:
-            popped = await self._redis.brpop(
-                [JOB_QUEUE_KEY], timeout=BRPOP_TIMEOUT_SECONDS
-            )
+            popped = await self._redis.brpop([JOB_QUEUE_KEY], timeout=BRPOP_TIMEOUT_SECONDS)
         except asyncio.CancelledError:
             raise
         except Exception:

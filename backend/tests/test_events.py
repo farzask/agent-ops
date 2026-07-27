@@ -57,16 +57,12 @@ async def _make_run(session: AsyncSession, job: Job, index: int = 0) -> AgentRun
 
 def test_legal_agent_transitions_match_spec() -> None:
     assert LEGAL_AGENT_TRANSITIONS[AgentStatus.IDLE] == frozenset({AgentStatus.QUEUED})
-    assert LEGAL_AGENT_TRANSITIONS[AgentStatus.QUEUED] == frozenset(
-        {AgentStatus.RUNNING}
-    )
+    assert LEGAL_AGENT_TRANSITIONS[AgentStatus.QUEUED] == frozenset({AgentStatus.RUNNING})
     assert LEGAL_AGENT_TRANSITIONS[AgentStatus.RUNNING] == frozenset(
         {AgentStatus.COMPLETED, AgentStatus.FAILED}
     )
     assert AgentStatus.RETRYING in LEGAL_AGENT_TRANSITIONS[AgentStatus.FAILED]
-    assert LEGAL_AGENT_TRANSITIONS[AgentStatus.RETRYING] == frozenset(
-        {AgentStatus.RUNNING}
-    )
+    assert LEGAL_AGENT_TRANSITIONS[AgentStatus.RETRYING] == frozenset({AgentStatus.RUNNING})
 
 
 def test_idle_cannot_jump_straight_to_running() -> None:

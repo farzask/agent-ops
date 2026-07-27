@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 
 def utcnow() -> datetime:
     """Timezone-aware UTC now. Never ``datetime.utcnow()`` (naive, deprecated)."""
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 # ---------------------------------------------------------------------------
@@ -79,9 +79,7 @@ class IllegalTransitionError(RuntimeError):
         self.new = new
 
 
-def assert_legal_agent_transition(
-    previous: AgentStatus, new: AgentStatus
-) -> None:
+def assert_legal_agent_transition(previous: AgentStatus, new: AgentStatus) -> None:
     if new not in LEGAL_AGENT_TRANSITIONS.get(previous, frozenset()):
         raise IllegalTransitionError("agent status", previous, new)
 
@@ -158,9 +156,7 @@ class EventEmitter:
             # A pub/sub outage must not abort an in-flight pipeline. The write
             # is already committed, so a reconnecting client backfills from
             # Postgres and loses nothing but liveness.
-            logger.exception(
-                "failed to publish event for job %s; state is persisted", job_key
-            )
+            logger.exception("failed to publish event for job %s; state is persisted", job_key)
 
     # -- log lines ---------------------------------------------------------
 
@@ -302,9 +298,7 @@ class EventEmitter:
         return job
 
 
-async def reconcile_orphaned_jobs(
-    session: AsyncSession, publisher: EventPublisher
-) -> int:
+async def reconcile_orphaned_jobs(session: AsyncSession, publisher: EventPublisher) -> int:
     """Fail jobs left ``running`` by a crashed worker.
 
     Run at worker startup. Without this, a mid-run crash leaves a job spinning

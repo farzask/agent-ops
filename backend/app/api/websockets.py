@@ -74,9 +74,7 @@ async def _pump(websocket: WebSocket, pubsub, label: str) -> None:
         asyncio.create_task(receiver(), name=f"{label}-receiver"),
     ]
     try:
-        done, pending = await asyncio.wait(
-            tasks, return_when=asyncio.FIRST_EXCEPTION
-        )
+        done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_EXCEPTION)
         for task in pending:
             task.cancel()
         # Surface the first real error (WebSocketDisconnect included) so the

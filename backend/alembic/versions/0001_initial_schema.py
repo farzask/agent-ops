@@ -10,31 +10,46 @@ Create Date: 2026-07-26
 
 from __future__ import annotations
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 
 import sqlalchemy as sa
-from alembic import op
 from sqlalchemy.dialects import postgresql
 
+from alembic import op
+
 revision: str = "0001_initial_schema"
-down_revision: Union[str, None] = None
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = None
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 # `create_type=False` prevents a second CREATE TYPE attempt when create_table
 # runs; the types are created explicitly below. Omitting it raises
 # `DuplicateObject: type "job_status" already exists`.
 JOB_STATUS = postgresql.ENUM(
-    "queued", "running", "completed", "failed",
-    name="job_status", create_type=False,
+    "queued",
+    "running",
+    "completed",
+    "failed",
+    name="job_status",
+    create_type=False,
 )
 AGENT_STATUS = postgresql.ENUM(
-    "idle", "queued", "running", "completed", "failed", "retrying",
-    name="agent_status", create_type=False,
+    "idle",
+    "queued",
+    "running",
+    "completed",
+    "failed",
+    "retrying",
+    name="agent_status",
+    create_type=False,
 )
 LOG_LEVEL = postgresql.ENUM(
-    "info", "warn", "error", name="log_level", create_type=False,
+    "info",
+    "warn",
+    "error",
+    name="log_level",
+    create_type=False,
 )
 
 
@@ -84,9 +99,7 @@ def upgrade() -> None:
             nullable=False,
             server_default="{}",
         ),
-        sa.Column(
-            "output_payload", postgresql.JSONB(astext_type=sa.Text()), nullable=True
-        ),
+        sa.Column("output_payload", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
         sa.Column("failure_reason", sa.Text(), nullable=True),
         sa.ForeignKeyConstraint(["job_id"], ["jobs.id"], ondelete="CASCADE"),
     )
@@ -112,9 +125,7 @@ def upgrade() -> None:
         sa.Column("level", LOG_LEVEL, nullable=False),
         sa.Column("message", sa.Text(), nullable=False),
         sa.ForeignKeyConstraint(["job_id"], ["jobs.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(
-            ["agent_run_id"], ["agent_runs.id"], ondelete="CASCADE"
-        ),
+        sa.ForeignKeyConstraint(["agent_run_id"], ["agent_runs.id"], ondelete="CASCADE"),
     )
     # Chronological retrieval and `?since=` cursor pagination (TECH_SPEC 4.2).
     op.create_index(
